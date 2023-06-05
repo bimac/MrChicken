@@ -43,20 +43,25 @@ enum states {
   falseAlarm,
   miss,
   correctRejection,
+  gotcha,
   endTrial,
   levelUp,
   gameOver,
-  timeToSleep,
   goToSleep
 };
 states state = welcome;
 
-#define LVL_ONE_MILLIS 1000
-#define START_LIVES 5
+#define LVL_ONE_MILLIS_STIM 1000
+#define LVL_ONE_MILLIS_WAIT_MIN 1000
+#define LVL_ONE_MILLIS_WAIT_MAX 3000
+#define LVL_ONE_LIVES 5
+#define STIM_MIN 400
 #define TRIALS_PER_LEVEL 10
+#define SPEED_UP_STIM 0.97
+#define SPEED_UP_WAIT 0.97
 
 volatile uint32_t lastInteraction;
-uint32_t thisMillis, waitMillis, startStimMillis, startWaitMillis, stimMillis;
+uint32_t thisMillis, waitMillis, startStimMillis, startWaitMillis, stimMillis, waitMillisMin, waitMillisMax;
 uint16_t score, highscore;
 int8_t answer, trial;
 uint8_t level, lives;
@@ -65,13 +70,6 @@ char buf[20];
 
 void wake() {
   // Just a handler for the pin interrupt.
-
-  // sleep_disable();
-  // detachInterrupt(digitalPinToInterrupt(BUTTON_R));
-  // detachPCINT(digitalPinToPCINT(BUTTON_B));
-  // detachPCINT(digitalPinToPCINT(BUTTON_Y));
-  // lastInteraction = millis();
-  // state = welcome;
 }
 
 void jiggle(const char *text) {
@@ -147,11 +145,6 @@ void loop() {
     answer = -1;
   }
 
-  // should we go to sleep?
-  // if (thisMillis-lastInteraction > 60000) {
-  //   state = STATE_GO_TO_SLEEP;
-  // }
-
   switch (state) {
   case welcome:
     u8g2.setPowerSave(0);
@@ -162,10 +155,12 @@ void loop() {
   case initialize:
     lastInteraction = thisMillis;
     level = 1;
-    stimMillis = LVL_ONE_MILLIS;
+    lives = LVL_ONE_LIVES;
+    stimMillis = LVL_ONE_MILLIS_STIM;
+    waitMillisMin = LVL_ONE_MILLIS_WAIT_MIN;
+    waitMillisMax = LVL_ONE_MILLIS_WAIT_MAX;
 
   case startLevel:
-    lives = START_LIVES;
     if (allCorrect) {
       jiggle("BONUS LIFE!", 1000);
       lives++;
@@ -181,7 +176,6 @@ void loop() {
     allCorrect = true;
 
   case initTrial:
-    trial++;
     answer = -1;
     if (random(0, 20) < 1) {
       color = green;
@@ -194,7 +188,7 @@ void loop() {
 
   case startWait:
     startWaitMillis = thisMillis;
-    waitMillis = random(1000, 3000);
+    waitMillis = random(waitMillisMin, waitMillisMax);
     state = continueWait;
 
   case continueWait:
@@ -221,7 +215,6 @@ void loop() {
         state = falseAlarm;
       }
       dotstar.clear();
-      noTone(BUZZER);
     } else if (thisMillis - startStimMillis > stimMillis) {
       if (doBuzz && color != green) {
         state = miss;
@@ -229,37 +222,93 @@ void loop() {
         state = correctRejection;
       }
       dotstar.clear();
-      noTone(BUZZER);
     }
     break;
 
   case hit:
-    jiggle("HIT!", 400);
+      switch (random(0,6)) {
+      case 1:
+        jiggle("YES!", 400);
+        break;
+      case 2:
+        jiggle("YAY!", 400);
+        break;
+      case 3:
+        jiggle("WOOP WOOP!", 400);
+        break;
+      case 4:
+        jiggle("WOOHOO!", 400);
+        break;
+      case 5:
+        jiggle("WAHEY!", 400);
+        break;
+      default:
+        jiggle("HIT!", 400);
+    }
     score++;
     state = endTrial;
+    trial++;
     break;
 
   case falseAlarm:
-    jiggle("FALSE ALARM", 400);
+    switch (random(0,6)) {
+      case 1:
+        jiggle("NOPE!", 400);
+        break;
+      case 2:
+        jiggle("WHOOPS!", 400);
+        break;
+      case 3:
+        jiggle("NO!!", 400);
+        break;
+      case 4:
+        jiggle("WHAT?!", 400);
+        break;
+      case 5:
+        jiggle("EXCUSE ME?", 400);
+        break;
+      default:
+        jiggle("FALSE ALARM!", 400);
+    }
     lives--;
-    trial--;
     allCorrect = false;
     state = endTrial;
     break;
 
   case miss:
-    jiggle("MISS!", 400);
+    switch (random(0,6)) {
+      case 1:
+        jiggle("SLIP UP!", 400);
+        break;
+      case 2:
+        jiggle("ARGH!", 400);
+        break;
+      case 3:
+        jiggle("DAMN!", 400);
+        break;
+      case 4:
+        jiggle("D'OH!", 400);
+        break;
+      case 5:
+        jiggle("DANG!", 400);
+        break;
+      default:
+        jiggle("MISS!", 400);
+    }
     lives--;
-    trial--;
     allCorrect = false;
     state = endTrial;
     break;
 
   case correctRejection:
-    jiggle("CORRECT", 400);
-    score++;
     state = endTrial;
     break;
+
+  case gotcha:
+    jiggle("GOTCHA!", 400);
+    lives--;
+    allCorrect = false;
+    state = endTrial;
 
   case endTrial:
     if (lives == 0) {
@@ -272,12 +321,16 @@ void loop() {
     break;
 
   case levelUp:
-    stimMillis = stimMillis * 9 / 10;
+    stimMillis = max(STIM_MIN, stimMillis * SPEED_UP_STIM);
+    waitMillisMin *= SPEED_UP_WAIT;
+    waitMillisMax *= SPEED_UP_WAIT;
     state = startLevel;
+    Serial.println(stimMillis);
     level++;
     break;
 
   case gameOver:
+    delay(500);
     jiggle("GAME OVER", 1000);
     sprintf(buf, "SCORE: %d", score);
     jiggle(buf, 1000);
@@ -289,15 +342,14 @@ void loop() {
     state = goToSleep;
     break;
 
-  // ----------------------
+
+
+
+
+  // ------------------------------------------
     break;
-  case timeToSleep:
-    jiggle("ZZZ", 500);
-    state = goToSleep;
-    // no break!
 
   case goToSleep:
-    // // adapted from https://www.gammon.com.au/power
 
     // clear OLED & dotstars
     u8g2.clearDisplay();
@@ -319,35 +371,14 @@ void loop() {
 
     // ------------------------------------------
 
-    // detach interrupts
+    // detach interrupts after waking up again
     detachInterrupt(digitalPinToInterrupt(BUTTON_R));
     detachPCINT(digitalPinToPCINT(BUTTON_B));
     detachPCINT(digitalPinToPCINT(BUTTON_Y));
 
+    //  go back to start ...
     lastInteraction = millis();
     state = welcome;
-
-    // ADCSRA = 0; // disable ADC
-
-    // set_sleep_mode(SLEEP_MODE_PWR_DOWN);
-    // sleep_enable();
-
-    // // Do not interrupt before we go to sleep, or the
-    // // ISR will detach interrupts and we won't wake.
-    // noInterrupts();
-
-    // // clear any outstanding interrupts
-    // EIFR |= bit(INTF0);
-    // PCIFR |= bit(digitalPinToPCICRbit(BUTTON_B));
-    // PCIFR |= bit(digitalPinToPCICRbit(BUTTON_Y));
-
-    // // attach interrupts
-    // attachInterrupt(digitalPinToInterrupt(BUTTON_R), wake, LOW);
-    // attachPCINT(digitalPinToPCINT(BUTTON_B), wake, CHANGE);
-    // attachPCINT(digitalPinToPCINT(BUTTON_Y), wake, CHANGE);
-
-    // interrupts(); // one cycle
-    // sleep_cpu();  // one cycle, CPU is ASLEEP and waiting for interrupts
 
   default:
     break;

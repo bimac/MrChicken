@@ -67,6 +67,7 @@ int8_t answer, trial;
 uint8_t level, lives;
 bool doBuzz, allCorrect = false;
 char buf[20];
+float measuredvbat;
 
 void wake() {
   // Just a handler for the pin interrupt.
@@ -148,7 +149,14 @@ void loop() {
   switch (state) {
   case welcome:
     u8g2.setPowerSave(0);
-    // dotstar.welcome();
+
+    delay(2000);
+    if (analogRead(A9) * 2 * 3.3 / 1024 < 3.3) {
+      jiggle("BATTERY LOW", 1000);
+      state = goToSleep;
+      break;
+    }
+
     jiggle("MR. CHICKEN!", 1000);
     delay(500);
 

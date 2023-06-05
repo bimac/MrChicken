@@ -5,6 +5,7 @@ DotStar::DotStar() {
 }
 
 void DotStar::begin() {
+  FastLED.setMaxPowerInVoltsAndMilliamps(5,1000);
   pinMode(17, OUTPUT);
   FastLED.clear(true);
   FastLED.setBrightness(80);

@@ -3,6 +3,7 @@
 #include <EEPROM.h>
 #include <PinChangeInterrupt.h>
 #include <U8g2lib.h>
+#include <LowPower.h>
 
 #include <avr/interrupt.h>
 #include <avr/power.h>
@@ -63,12 +64,14 @@ bool doBuzz, allCorrect = false;
 char buf[20];
 
 void wake() {
-  sleep_disable();
-  detachInterrupt(digitalPinToInterrupt(BUTTON_R));
-  detachPCINT(digitalPinToPCINT(BUTTON_B));
-  detachPCINT(digitalPinToPCINT(BUTTON_Y));
-  lastInteraction = millis();
-  state = welcome;
+  // Just a handler for the pin interrupt.
+
+  // sleep_disable();
+  // detachInterrupt(digitalPinToInterrupt(BUTTON_R));
+  // detachPCINT(digitalPinToPCINT(BUTTON_B));
+  // detachPCINT(digitalPinToPCINT(BUTTON_Y));
+  // lastInteraction = millis();
+  // state = welcome;
 }
 
 void jiggle(const char *text) {
@@ -294,21 +297,12 @@ void loop() {
     // no break!
 
   case goToSleep:
-    // adapted from https://www.gammon.com.au/power
+    // // adapted from https://www.gammon.com.au/power
 
     // clear OLED & dotstars
     u8g2.clearDisplay();
     u8g2.setPowerSave(1);
     dotstar.clear();
-
-    ADCSRA = 0; // disable ADC
-
-    set_sleep_mode(SLEEP_MODE_PWR_DOWN);
-    sleep_enable();
-
-    // Do not interrupt before we go to sleep, or the
-    // ISR will detach interrupts and we won't wake.
-    noInterrupts();
 
     // clear any outstanding interrupts
     EIFR |= bit(INTF0);
@@ -320,8 +314,40 @@ void loop() {
     attachPCINT(digitalPinToPCINT(BUTTON_B), wake, CHANGE);
     attachPCINT(digitalPinToPCINT(BUTTON_Y), wake, CHANGE);
 
-    interrupts(); // one cycle
-    sleep_cpu();  // one cycle, CPU is ASLEEP and waiting for interrupts
+    // Enter power down state with ADC disabled
+    LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);
+
+    // ------------------------------------------
+
+    // detach interrupts
+    detachInterrupt(digitalPinToInterrupt(BUTTON_R));
+    detachPCINT(digitalPinToPCINT(BUTTON_B));
+    detachPCINT(digitalPinToPCINT(BUTTON_Y));
+
+    lastInteraction = millis();
+    state = welcome;
+
+    // ADCSRA = 0; // disable ADC
+
+    // set_sleep_mode(SLEEP_MODE_PWR_DOWN);
+    // sleep_enable();
+
+    // // Do not interrupt before we go to sleep, or the
+    // // ISR will detach interrupts and we won't wake.
+    // noInterrupts();
+
+    // // clear any outstanding interrupts
+    // EIFR |= bit(INTF0);
+    // PCIFR |= bit(digitalPinToPCICRbit(BUTTON_B));
+    // PCIFR |= bit(digitalPinToPCICRbit(BUTTON_Y));
+
+    // // attach interrupts
+    // attachInterrupt(digitalPinToInterrupt(BUTTON_R), wake, LOW);
+    // attachPCINT(digitalPinToPCINT(BUTTON_B), wake, CHANGE);
+    // attachPCINT(digitalPinToPCINT(BUTTON_Y), wake, CHANGE);
+
+    // interrupts(); // one cycle
+    // sleep_cpu();  // one cycle, CPU is ASLEEP and waiting for interrupts
 
   default:
     break;

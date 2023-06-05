@@ -64,7 +64,7 @@ char buf[20];
 
 void wake() {
   sleep_disable();
-  detachInterrupt(0);
+  detachInterrupt(digitalPinToInterrupt(BUTTON_R));
   detachPCINT(digitalPinToPCINT(BUTTON_B));
   detachPCINT(digitalPinToPCINT(BUTTON_Y));
   lastInteraction = millis();
@@ -269,7 +269,7 @@ void loop() {
     break;
 
   case levelUp:
-    stimMillis = stimMillis * 10 / 9;
+    stimMillis = stimMillis * 9 / 10;
     state = startLevel;
     level++;
     break;
@@ -316,7 +316,7 @@ void loop() {
     PCIFR |= bit(digitalPinToPCICRbit(BUTTON_Y));
 
     // attach interrupts
-    attachInterrupt(0, wake, CHANGE);
+    attachInterrupt(digitalPinToInterrupt(BUTTON_R), wake, LOW);
     attachPCINT(digitalPinToPCINT(BUTTON_B), wake, CHANGE);
     attachPCINT(digitalPinToPCINT(BUTTON_Y), wake, CHANGE);
 
